@@ -4,8 +4,7 @@
 
 1. Clone the repository.
 2. Install dependencies: `npm install`.
-3. Create a `.env` file and add your `DB_URL`.
-   `DB_URL=your_database_link`
+3. Create a `.env` file and add your `DB_URL = your_database_link`
 4. Commands:
 - `node room.js register mail@test.com pass123` — registration
 - `node room.js login mail@test.com pass123` — login
