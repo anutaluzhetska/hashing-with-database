@@ -5,7 +5,8 @@ import pg from 'pg';
 dotenv.config()
 
 const { Pool } = pg;
-const saltRounds = 10;
+const SALT_ROUNDS = 10;
+
 
 const pool = new Pool({
     connectionString: `${process.env.DB_URL}`,
@@ -21,7 +22,7 @@ const initializeDatabase = async () => {
     const createTableQuery = `
         CREATE TABLE IF NOT EXISTS kotik (
         id SERIAL PRIMARY KEY,
-        email TEXT NOT NULL,   
+        email TEXT NOT NULL UNIQUE,   
         password_hash TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP   
 );
@@ -39,7 +40,7 @@ const initializeDatabase = async () => {
 // REGISTER - Реєстрація нового користувача 
 async function registerUser(email, password) {
     try {
-        const hash = await bcrypt.hash(password, saltRounds);
+        const hash = await bcrypt.hash(password, SALT_ROUNDS);
         const query = `
         INSERT INTO kotik (email, password_hash)
         VALUES ($1, $2)
@@ -81,22 +82,49 @@ async function loginUser(email, password) {
 
 // LIST - Перегляд усіх користувачів 
 async function getAllUsers() {
-    const res = await pool.query('SELECT id, email, password_hash, created_at FROM kotik ORDER BY id ASC');
-    console.log('List of all registered users:');
-    console.table(res.rows);
-}
-
-// DELETE - Видалення користувача за ID
-async function deleteUser(id) {
     try {
-        const res = await pool.query('DELETE FROM kotik WHERE id = $1 RETURNING *', [id]);
-        if (res.rows.length > 0) {
-            console.log(`User with ID ${id} has been removed.`);
+        const res = await pool.query('SELECT id, email, password_hash, created_at FROM kotik ORDER BY id ASC');
+        const simplifiedUsers = res.rows.map(({ id, email }) => ({ id, email }));
+
+        console.log('List of users(id and username):');
+        if (simplifiedUsers.length > 0) {
+            console.table(simplifiedUsers);
         } else {
-            console.log(`User with ID ${id} not found.`);
+            console.log("There are no users yet.")
+        }
+    } catch (error) {
+        console.log("Error retrieving list:", error.message);
+    }
+}
+// DELETE - Видалення користувача за ID
+async function deleteUser(email) {
+    try {
+        const res = await pool.query('DELETE FROM kotik WHERE email = $1 RETURNING *', [email]);
+        if (res.rows.length > 0) {
+            console.log(`User with email "${email}" has been removed.`);
+        } else {
+            console.log(`User with email "${email}" not found.`);
         }
     } catch (err) {
         console.error('Delete error:', err.message);
+    }
+}
+
+// UPDATE - Оновлення пароля користувача
+async function updateUserPassword(email, newPassword) {
+    try {
+        const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+        const query = "UPDATE kotik SET password_hash = $1 WHERE email = $2 RETURNING id, email";
+        const res = await pool.query(query, [newHash, email]);
+
+        if (res.rows.length > 0) {
+            console.log(`Password for user "${email}" has been successfully updated.`);
+        } else {
+            console.log(`User with eamil "${email}" not found.`);
+        }
+    } catch (error) {
+        console.error("Password update error:", error.message);
     }
 }
 
@@ -129,9 +157,17 @@ const dataEntryViaTerminal = async () => {
                 }
                 break;
 
+            case 'update':
+                if (args.length < 2) {
+                    console.log("Usage: node room.js update <email> <new_password>");
+                } else {
+                    await updateUserPassword(args[0], args[1]);
+                }
+                break;
+
             case 'delete':
                 if (!args[0]) {
-                    console.log("Error: Please specify the ID to delete.");
+                    console.log("Error: Please specify the username (email) to delete.");
                 } else {
                     await deleteUser(args[0]);
                 }
@@ -144,7 +180,8 @@ const dataEntryViaTerminal = async () => {
 list - Show all registered users
 register <email> <password> - Add a new user
 login <email> <password> - Authenticate user
-delete <id> - Remove user by ID
+delete <email> - Remove user by ID
+update <email> <new_password> - Change user password
 help - Show this menu
                             `);
                 break;
@@ -158,3 +195,10 @@ help - Show this menu
     }
 };
 dataEntryViaTerminal();
+
+// node room.js list
+// node room.js help
+// node room.js register tom@gmail.com 147258369
+// node room.js login tom@gmail.com 147258369
+// node room.js delete tom@gmail.com
+// node room.js uplate tom@gmail.com 321654987
